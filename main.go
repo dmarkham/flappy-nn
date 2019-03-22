@@ -8,16 +8,15 @@ import (
 	"runtime/pprof"
 	"time"
 
+	"github.com/dmarkham/goNEAT/experiments"
+	"github.com/dmarkham/goNEAT/neat"
+	"github.com/dmarkham/goNEAT/neat/genetics"
 	"github.com/spf13/pflag"
-	"github.com/wildlink/deviceapi/delivery/common/config"
-
-	"github.com/yaricom/goNEAT/experiments"
-	"github.com/yaricom/goNEAT/neat"
-	"github.com/yaricom/goNEAT/neat/genetics"
+	"github.com/spf13/viper"
 )
 
 func main() {
-	conf := config.NewConfig()
+	conf := viper.New()
 	pflag.String("config", "config.neat", "Config for Neat")
 	pflag.String("out-dir", "/tmp/out", "Default output Dir")
 	pflag.Bool("profile", false, "turn Profile on")
