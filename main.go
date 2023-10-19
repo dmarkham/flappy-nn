@@ -11,6 +11,7 @@ import (
 	"github.com/dmarkham/goNEAT/experiments"
 	"github.com/dmarkham/goNEAT/neat"
 	"github.com/dmarkham/goNEAT/neat/genetics"
+	"github.com/hajimehoshi/ebiten"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -76,32 +77,41 @@ func main() {
 	//if !ok {
 	//	panic(err)
 	//}
+	var _ experiments.GenerationEvaluator = (*ModelEvaluator)(nil)
+	mEval := &ModelEvaluator{OutputPath: outDir}
 
-	err = experiment.Execute(context, start_genome, ModelEvaluator{OutputPath: outDir})
-	if err != nil {
-		log.Fatal("Failed to perform XOR experiment: ", err)
-	}
-	if profile {
-		f, err := os.Create("memprofile")
+	ebiten.SetRunnableInBackground(true)
+	ebiten.SetMaxTPS(10)
+
+	go func() {
+		err = experiment.Execute(context, start_genome, mEval)
 		if err != nil {
-			log.Fatal("could not create memory profile: ", err)
+			log.Fatal("Failed to perform XOR experiment: ", err)
 		}
-		runtime.GC() // get up-to-date statistics
-		if err := pprof.WriteHeapProfile(f); err != nil {
-			log.Fatal("could not write memory profile: ", err)
+		if profile {
+			f, err := os.Create("memprofile")
+			if err != nil {
+				log.Fatal("could not create memory profile: ", err)
+			}
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				log.Fatal("could not write memory profile: ", err)
+			}
+			f.Close()
 		}
-		f.Close()
-	}
-	// Print statistics
-	experiment.PrintStatistics()
+		// Print statistics
+		experiment.PrintStatistics()
 
-	// Save experment data
-	expResPath := fmt.Sprintf("%s/%s.dat", outDir, "MyExp")
-	expResFile, err := os.Create(expResPath)
-	if err == nil {
-		err = experiment.Write(expResFile)
-	}
-	if err != nil {
-		log.Fatal("Failed to save experiment results", err)
-	}
+		// Save experment data
+		expResPath := fmt.Sprintf("%s/%s.dat", outDir, "MyExp")
+		expResFile, err := os.Create(expResPath)
+		if err == nil {
+			err = experiment.Write(expResFile)
+		}
+		if err != nil {
+			log.Fatal("Failed to save experiment results", err)
+		}
+
+	}()
+	ebiten.Run(mEval.Draw, screenWidth, screenHeight, 1, "Flappy Gopher (Ebiten Demo)")
 }

@@ -24,7 +24,7 @@ import (
 	resources "github.com/hajimehoshi/ebiten/examples/resources/images/flappy"
 	"github.com/hajimehoshi/ebiten/inpututil"
 	"github.com/hajimehoshi/ebiten/text"
-	"github.com/yaricom/goNEAT/neat/genetics"
+	"github.com/dmarkham/goNEAT/neat/genetics"
 	"golang.org/x/image/font"
 )
 

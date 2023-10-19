@@ -5,25 +5,29 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/png"
 	"log"
+	"math"
 	"math/rand"
 
+	"github.com/dmarkham/goNEAT/neat/genetics"
 	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/ebitenutil"
 	resources "github.com/hajimehoshi/ebiten/examples/resources/images/flappy"
-	"github.com/yaricom/goNEAT/neat/genetics"
+	"golang.org/x/image/font"
 )
 
 func init() {
 	//rand.Seed(time.Now().UnixNano())
-	rand.Seed(43)
+	//rand.Seed(43)
 }
 
 var (
-	gopherImage *ebiten.Image
-	//tilesImage  *ebiten.Image
-	//arcadeFont      font.Face
-	//smallArcadeFont font.Face
+	gopherImage     *ebiten.Image
+	tilesImage      *ebiten.Image
+	arcadeFont      font.Face
+	smallArcadeFont font.Face
 )
 
 func init() {
@@ -33,11 +37,11 @@ func init() {
 	}
 	gopherImage, _ = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
 
-	//img, _, err = image.Decode(bytes.NewReader(resources.Tiles_png))
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//tilesImage, _ = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
+	img, _, err = image.Decode(bytes.NewReader(resources.Tiles_png))
+	if err != nil {
+		log.Fatal(err)
+	}
+	tilesImage, _ = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
 }
 
 func floorDiv(x, y int) int {
@@ -64,7 +68,7 @@ const (
 	pipeStartOffsetX = 8
 	pipeIntervalX    = 16
 	pipeGapY         = 6
-	maxScore         = 500
+	maxScore         = 50
 )
 
 type Mode int
@@ -89,7 +93,7 @@ type Game struct {
 	// Camera
 	cameraX    int
 	cameraY    int
-	population *genetics.Population
+	Population *genetics.Population
 	// Pipes
 	pipeTileYs    []int
 	gameoverCount int
@@ -97,7 +101,7 @@ type Game struct {
 }
 
 func NewGame(pop *genetics.Population) *Game {
-	g := &Game{population: pop}
+	g := &Game{Population: pop}
 	g.init()
 	return g
 }
@@ -105,7 +109,7 @@ func NewGame(pop *genetics.Population) *Game {
 func (g *Game) init() {
 	g.mode = ModeGame
 
-	g.players = make([]*Player, len(g.population.Organisms))
+	g.players = make([]*Player, len(g.Population.Organisms))
 	for i := 0; i < len(g.players); i++ {
 		p := &Player{}
 		p.x16 = 0
@@ -122,6 +126,7 @@ func (g *Game) init() {
 			g.pipeTileYs[i] = rand.Intn(6) + 2
 		}
 	} else {
+		panic("in else")
 		g.pipeTileYs[0] = rand.Intn(6) + 2
 		g.pipeTileYs[1] = rand.Intn(6) + 2
 		g.pipeTileYs[3] = rand.Intn(6) + 2
@@ -147,13 +152,13 @@ func (g *Game) Update() error {
 			}
 
 			p.x16 += 32
-			org := g.population.Organisms[i]
+			org := g.Population.Organisms[i]
 			netDepth, err := org.Phenotype.MaxDepth()
 			if err != nil {
 				panic(fmt.Sprintf("Err 1: %+v", err))
 			}
 			d := float64((p.x16 + (tileSize * nextPipeDistance)) - p.x16)
-			//fmt.Println(p.x16/tileSize, g.cameraX, p.x16, p.vy16, nextPipeHight, nextPipeDistance, d)
+			//fmt.Println(i, p.x16/tileSize, g.cameraX, p.x16, p.vy16, nextPipeHight, nextPipeDistance, d)
 			//org.Phenotype.LoadSensors([]float64{float64(g.cameraX), float64(p.vy16), float64(p.y16), float64(nextPipeHight * tileSize), d})
 			org.Phenotype.LoadSensors([]float64{float64(p.vy16), float64(p.y16), float64(nextPipeHight * tileSize), d})
 			// Relax net and get output
@@ -222,6 +227,7 @@ func (g *Game) Update() error {
 
 		if deadCount == len(g.players) {
 			return errors.New("done")
+
 		}
 	}
 	return nil
@@ -256,6 +262,7 @@ func (g *Game) pipeAt(tileX int) (tileY int, ok bool) {
 }
 
 func (g *Player) score() int {
+	//return int(0 - math.Abs(float64(g.y16)))
 
 	//return g.x16
 	x := floorDiv(g.x16, 16) / tileSize
@@ -314,4 +321,87 @@ func (g *Game) hit(playerID int) bool {
 		}
 	}
 	return false
+}
+
+func (g *Game) drawGopher(screen *ebiten.Image) {
+
+	w, h := gopherImage.Size()
+	count := 0
+	for _, p := range g.players {
+
+		if p.dead {
+			//continue
+		}
+		op := &ebiten.DrawImageOptions{}
+		count++
+		if count > 5 {
+			//break
+		}
+		op.GeoM.Translate(-float64(w)/2.0, -float64(h)/2.0)
+		op.GeoM.Rotate(float64(p.vy16) / 96.0 * math.Pi / 6)
+		op.GeoM.Translate(float64(w)/2.0, float64(h)/2.0)
+		op.GeoM.Translate(float64(p.x16/16.0)-float64(g.cameraX), float64(p.y16/16.0)-float64(g.cameraY))
+		op.Filter = ebiten.FilterLinear
+		screen.DrawImage(gopherImage, op)
+	}
+}
+func (g *Game) drawTiles(screen *ebiten.Image) {
+	const (
+		nx           = screenWidth / tileSize
+		ny           = screenHeight / tileSize
+		pipeTileSrcX = 128
+		pipeTileSrcY = 192
+	)
+
+	op := &ebiten.DrawImageOptions{}
+	for i := -2; i < nx+1; i++ {
+		// ground
+		op.GeoM.Reset()
+		op.GeoM.Translate(float64(i*tileSize-floorMod(g.cameraX, tileSize)),
+			float64((ny-1)*tileSize-floorMod(g.cameraY, tileSize)))
+		screen.DrawImage(tilesImage.SubImage(image.Rect(0, 0, tileSize, tileSize)).(*ebiten.Image), op)
+
+		// pipe
+		if tileY, ok := g.pipeAt(floorDiv(g.cameraX, tileSize) + i); ok {
+			for j := 0; j < tileY; j++ {
+				op.GeoM.Reset()
+				op.GeoM.Scale(1, -1)
+				op.GeoM.Translate(float64(i*tileSize-floorMod(g.cameraX, tileSize)),
+					float64(j*tileSize-floorMod(g.cameraY, tileSize)))
+				op.GeoM.Translate(0, tileSize)
+				var r image.Rectangle
+				if j == tileY-1 {
+					r = image.Rect(pipeTileSrcX, pipeTileSrcY, pipeTileSrcX+tileSize*2, pipeTileSrcY+tileSize)
+				} else {
+					r = image.Rect(pipeTileSrcX, pipeTileSrcY+tileSize, pipeTileSrcX+tileSize*2, pipeTileSrcY+tileSize*2)
+				}
+				screen.DrawImage(tilesImage.SubImage(r).(*ebiten.Image), op)
+			}
+			for j := tileY + pipeGapY; j < screenHeight/tileSize-1; j++ {
+				op.GeoM.Reset()
+				op.GeoM.Translate(float64(i*tileSize-floorMod(g.cameraX, tileSize)),
+					float64(j*tileSize-floorMod(g.cameraY, tileSize)))
+				var r image.Rectangle
+				if j == tileY+pipeGapY {
+					r = image.Rect(pipeTileSrcX, pipeTileSrcY, pipeTileSrcX+pipeWidth, pipeTileSrcY+tileSize)
+				} else {
+					r = image.Rect(pipeTileSrcX, pipeTileSrcY+tileSize, pipeTileSrcX+pipeWidth, pipeTileSrcY+tileSize+tileSize)
+				}
+				screen.DrawImage(tilesImage.SubImage(r).(*ebiten.Image), op)
+			}
+		}
+	}
+}
+func (g *Game) Draw(screen *ebiten.Image) error {
+	//screen.Clear()
+	screen.Fill(color.RGBA{0x80, 0xa0, 0xc0, 0xff})
+	g.drawTiles(screen)
+
+	g.drawGopher(screen)
+
+	//scoreStr := fmt.Sprintf("%04d", g.player.score())
+	//scoreStr := "Yo"
+	//text.Draw(screen, scoreStr, arcadeFont, screenWidth-len(scoreStr)*fontSize, fontSize, color.White)
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.CurrentTPS()))
+	return nil
 }

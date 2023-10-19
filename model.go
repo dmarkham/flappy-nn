@@ -3,32 +3,55 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
-	"github.com/yaricom/goNEAT/experiments"
-	"github.com/yaricom/goNEAT/neat"
-	"github.com/yaricom/goNEAT/neat/genetics"
+	"github.com/dmarkham/goNEAT/experiments"
+	"github.com/dmarkham/goNEAT/neat"
+	"github.com/dmarkham/goNEAT/neat/genetics"
+	"github.com/hajimehoshi/ebiten"
 )
 
 type ModelEvaluator struct {
+	sync.Mutex
 	OutputPath string
+	g          *Game
+	tick       uint64
 }
 
-func (ex ModelEvaluator) GenerationEvaluate(pop *genetics.Population, epoch *experiments.Generation, context *neat.NeatContext) error {
+func (ex *ModelEvaluator) Draw(screen *ebiten.Image) error {
 
+	ex.Lock()
+	defer ex.Unlock()
+	if ex.g == nil {
+		return nil
+	}
+
+	ex.g.Draw(screen)
+	ex.tick = ex.g.steps
+	return nil
+}
+
+func (ex *ModelEvaluator) GenerationEvaluate(pop *genetics.Population, epoch *experiments.Generation, context *neat.NeatContext) error {
+	ex.Lock()
 	g := NewGame(pop)
+	ex.g = g
+	ex.Unlock()
+
 	for {
+
+		time.Sleep(time.Millisecond * 14)
+		ex.Lock()
 		err := g.Update()
+		ex.Unlock()
 		if err != nil {
 			break
 		}
+
 	}
 	// Evaluate each organism on a test
 	b := 0.0
 	for _, org := range pop.Organisms {
-		//winner, err := ex.orgEvaluate(org)
-		//if err != nil {
-		//	return err
-		//}
 		if org.Fitness > b {
 			b = org.Fitness
 		}
@@ -44,7 +67,7 @@ func (ex ModelEvaluator) GenerationEvaluate(pop *genetics.Population, epoch *exp
 
 	}
 
-	fmt.Printf("Generation: %v  Best: %.02f Last Pop %.02f\n", epoch.Id, pop.HighestFitness, b)
+	fmt.Printf("Generation: %v  Best: %.06f Last Pop %.06f\n", epoch.Id, pop.HighestFitness, b)
 	epoch.FillPopulationStatistics(pop)
 
 	//fmt.Println("Best: ", pop.HighestFitness)
